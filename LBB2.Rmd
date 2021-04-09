@@ -1,0 +1,242 @@
+---
+title: "LBB2"
+author: "Reynard Verill"
+date: "`r format(Sys.Date(), '%B %e, %Y')`"
+output:
+  html_document:
+    df_print: paged
+    highlight: breezedark
+    theme: united
+    toc: yes
+    toc_float:
+      collapsed: no
+    css: assets/style.css
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.align = "center", out.width = "80%")
+options(scipen = 99)
+```
+
+
+<style>
+body {
+text-align: justify}
+</style>
+
+# Objectives
+
+In this project, we will do exploratory data analysis on a bank's data set, which was obtained from https://archive.ics.uci.edu/ml/datasets/bank+marketing, and try to gain insights regarding the distribution of the dataset through the implementation of data visualization.
+
+```{r}
+knitr::include_graphics("assets/bank.jpeg")
+```
+
+# Libraries and Setup
+
+In this section, we will import the necessary libraries for this project.
+
+```{r library}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(glue)
+library(plotly)
+```
+
+# Data Reading
+
+Here, we will read the csv data file into our IDE, do further inspection regarding our data, and perform suitable data cleansing for further processing.
+
+```{r reading}
+bank <- read.csv("bank/bank.csv", sep = ";")
+```
+
+# Data pre-processing {.tabset}
+
+Here we will perform an integral part of preparing our data into an understandable and complete format for the next step of machine learning.
+
+## Data Inspection
+```{r glimpse}
+glimpse(bank)
+```
+
+Input variables:
+
+1. age (numeric)
+2. job : type of job (categorical: "admin.", "unknown", "unemployed", "management", "housemaid", "entrepreneur", "student", "blue-collar", "self-employed", "retired", "technician", "services") 
+3. marital : marital status (categorical: "married","divorced","single"; note: "divorced" means divorced or widowed)
+4. education (categorical: "unknown","secondary","primary","tertiary")
+5. default: has credit in default? (binary: "yes","no")
+6. balance: average yearly balance, in euros (numeric) 
+7. housing: has housing loan? (binary: "yes","no")
+8. loan: has personal loan? (binary: "yes","no")
+9. contact: contact communication type (categorical: "unknown","telephone","cellular") 
+10. day: last contact day of the month (numeric)
+11. month: last contact month of year (categorical: "jan", "feb", "mar", ..., "nov", "dec")
+12. duration: last contact duration, in seconds (numeric)
+13. campaign: number of contacts performed during this campaign and for this client (numeric, includes last contact)
+14. pdays: number of days that passed by after the client was last contacted from a previous campaign (numeric, -1 means client was not previously contacted)
+15. previous: number of contacts performed before this campaign and for this client (numeric)
+16. poutcome: outcome of the previous marketing campaign (categorical: "unknown","other","failure","success")
+
+```{r}
+bank %>% head()
+```
+
+```{r}
+bank %>% tail()
+```
+
+```{r}
+summary(bank)
+```
+
+```{r}
+colSums(is.na(bank))
+```
+
+## Data Cleansing
+
+In this section of the report, we will make necessary adjustments to the data set in order to make it feasible for further processing and data exploration.
+
+As can be seen from the data description above which was provided by the source, the columns c("job", "marital", "education", "default", "housing", "loan", "contact", "month", "poutcome", "y") should have had categorical values. However, in the above inspection by using the glimpse function, it can be seen that they are still character data types. Hence, below they are transformed into the form of factors.
+```{r}
+bank <- bank %>% 
+  mutate_at(c("job", "marital", "education", "default", "housing", "loan", "contact", "month", "poutcome", "y"), as.factor)
+str(bank)
+```
+
+Below, we iterate through each columns to check the levels of each categorical variables for every factor data types in our data set.
+```{r}
+for (column in names(bank)) {
+  if (is.factor(bank[,column])) {
+    print(paste(column, ":", sep = " "))
+    print(levels(bank[,column]))
+  }
+}
+```
+
+# EDA (Exploratory Data Analysis) {.tabset}
+
+In this section, we will be performing concepts of feature engineering and data visualization in effort to successfully demonstrate exploratory data analysis concepts towards the audience.
+
+## Feature Engineering
+
+Here, we select only a small group of columns that will be needed to produce the boxplot of job - balance distribution across our dataframe. Here, we perform a label encoding to distinguish the different jobs using a new variable named job_id to enhance the aesthetics in our plotting by preventing colliding jobs in the x-axis of the label.
+
+```{r}
+balance_job_agg <- bank %>% 
+  mutate(job_id = factor(as.numeric(bank$job))) %>% 
+  select(c("balance", "job", "job_id"))
+balance_job_agg %>% head()
+```
+
+With the code chunk below, we subset the necessary columns with some adjustments for plotting job_id against number of acceptance of the product.
+```{r}
+yes_job_agg <- bank %>% 
+  mutate(job_id = factor(as.numeric(bank$job))) %>% 
+  filter(y == "yes") %>% 
+  select(c("job", "job_id", "y")) %>% 
+  group_by(job_id) %>% 
+  count(y) %>% 
+  mutate(tooltip = glue("Total Acceptance: {(n)}"))
+yes_job_agg %>% head()
+```
+```{r}
+no_job_agg <- bank %>% 
+  mutate(job_id = factor(as.numeric(bank$job))) %>% 
+  filter(y == "no") %>% 
+  select(c("job", "job_id", "y")) %>% 
+  group_by(job_id) %>% 
+  count(y) %>% 
+  mutate(tooltip = glue("Total Rejections: {(n)}"))
+no_job_agg %>% head()
+```
+```{r}
+yes_job_agg$ratio  <- yes_job_agg$n/no_job_agg$n
+acceptance_rate <- bank %>% 
+  mutate(job_id = factor(as.numeric(bank$job))) %>% 
+  select(c("job", "job_id")) %>% 
+  group_by(job_id) %>% 
+  inner_join(yes_job_agg) %>% 
+  select(c("job_id", "job", "ratio")) %>% 
+  mutate(tooltip = glue("Ratio: {(ratio)}%")) %>% 
+  arrange(job_id)
+acceptance_rate <- acceptance_rate %>% unique()
+acceptance_rate %>% head()
+```
+
+```{r}
+yes_count <- bank %>% 
+  group_by(marital) %>% 
+  filter(y=="yes") %>% 
+  count(y)
+no_count <- bank %>% 
+  group_by(marital) %>% 
+  filter(y=="no") %>% 
+  count(y)
+marital_y_agg <- rbind(yes_count, no_count)
+marital_y_agg
+```
+
+
+## Data Visualization
+
+The following is the label encoding that will be used in visualizing the distributions involving job_id.
+```{r}
+balance_job_agg %>% select(c("job", "job_id")) %>% distinct() %>% arrange(job_id)
+```
+
+A visualization using boxplot towards the distribution of balance among different jobs. From the below interpretation, we can notice the presence of many outliers that might skew the distribution upwards. However, there are also some extreme negative outliers that can be found in our dataframe, namely in the entrepreneur and self-employed sectors.
+```{r}
+ggplot(balance_job_agg, aes(x = job_id, y = balance)) +
+   geom_boxplot(aes(fill = balance)) +
+   labs(title = "Balance According to Job", x= "job_id", y= "Balance",
+        subtitle = "Avg. price indicated by the dotted red line") +
+   theme(plot.title = element_text(hjust = 0.5)) +
+   geom_hline(yintercept = mean(balance_job_agg$balance), color = "red", linetype = 5)
+```
+
+A plotting using geom_col to view the product acceptance distribution among different kind of jobs. It seems that the product is most well-perceived by the people in management field as reflected on the graph.
+```{r}
+p <- ggplot(yes_job_agg, aes(x = job_id, y= n, fill = n, text = tooltip)) +
+  geom_col(position = "identity") + 
+  scale_fill_gradient(low = "#e4333e", high = "#52171a") +
+  labs(title = "Product Acceptance Distribution Among Jobs", x ="job_id", y= "amount")+
+  theme_minimal()
+ggplotly(p, tooltip = c('text'))
+```
+
+The following is the product rejection distribution among different jobs as opposed to the above shown graph.
+```{r}
+p <- ggplot(no_job_agg, aes(x = job_id, y= n, fill = n, text = tooltip)) +
+  geom_col(position = "identity") + 
+  scale_fill_gradient(low = "#69eeee", high = "#157373") +
+  labs(title = "Product Rejection Distribution Among Jobs", x ="job_id", y= "amount")+
+  theme_minimal()
+ggplotly(p, tooltip = c('text'))
+```
+
+```{r}
+acc_p <- ggplot(acceptance_rate, aes(x = job_id, y = ratio, fill = ratio, text = tooltip)) +
+  geom_col() +
+  facet_grid( scales = "free_y")+
+  geom_point(aes(col=ratio))+
+  labs(title = "Acceptance Rate Among Each Job", x="job_id", y= "Ratio")+
+  coord_flip()
+ggplotly(acc_p, tooltip = c("text"))
+```
+
+The following graph attempts to illustrate the same product acceptance distributions on various marital status.
+```{r}
+ggplot(marital_y_agg,aes(x = marital,y = n))+
+   geom_col(aes(fill = y), position = "dodge") +
+   labs (title = "Product Acceptance Distribution Among Marital Groups", x = "Marital Status", y = "Amount of Acceptance", fill ="Acceptance")+
+   theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Conclusion
+Based on the above visualizations, it seems that targeting single, retired persons might be the most beneficial for the company in terms of obtaining customers for their product. The chart which shows that people in management position being the category with the most acceptance towards the bank's product can be inferred to be skewed due to the high amount of population within the sector as we can see the acceptance ratio is only about 1.6.
