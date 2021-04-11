@@ -36,7 +36,7 @@ knitr::include_graphics("assets/bank.jpeg")
 
 # Libraries and Setup
 
-In this section, we will import the necessary libraries for this project. .
+In this section, we will import the necessary libraries for this project. 
 
 ```{r library}
 library(dplyr)
